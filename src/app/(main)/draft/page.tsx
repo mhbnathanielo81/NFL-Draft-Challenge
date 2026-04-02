@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { PlayerAvatar, PosBadge, PickBadge } from "@/components/ui/badges";
+import { TeamLogo } from "@/components/ui/TeamLogo";
 import { PROSPECTS_2026 } from "@/data/prospects";
 import { DRAFT_ORDER_2026, getAllTeams } from "@/data/draft-order";
 import { POS_COLORS } from "@/lib/utils";
@@ -11,11 +13,19 @@ import {
   ArrowUpDown,
   Star,
   Send,
+  Save,
   ChevronRight,
+  ArrowLeft,
 } from "lucide-react";
-import type { Prospect } from "@/types";
+import type { Prospect, DraftSlot } from "@/types";
 
 export default function DraftPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const leagueId = searchParams.get("leagueId");
+  const leagueName = searchParams.get("leagueName");
+  const leagueRounds = parseInt(searchParams.get("rounds") || "1", 10) as 1 | 2;
+
   const [picks, setPicks] = useState<Record<number, Prospect>>({});
   const [confidence, setConfidence] = useState<Record<number, number>>({});
   const [activePick, setActivePick] = useState<number | null>(null);
@@ -27,8 +37,41 @@ export default function DraftPage() {
   const [tradeFrom, setTradeFrom] = useState("");
   const [tradeTo, setTradeTo] = useState("");
   const [activeRound, setActiveRound] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const totalRounds = 1; // Will be configurable per league
+  const totalRounds = leagueRounds || 1;
+
+  // Build a trade lookup map to swap team logos when trades are predicted
+  const tradeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of trades) {
+      map.set(t.from, t.to);
+      map.set(t.to, t.from);
+    }
+    return map;
+  }, [trades]);
+
+  // Apply trade swaps to get the effective slot info (team logo swaps)
+  const getEffectiveSlot = useCallback(
+    (slot: DraftSlot): DraftSlot => {
+      const swappedTeam = tradeMap.get(slot.team);
+      if (!swappedTeam) return slot;
+      // Find the other slot that has the swapped team to get its logo info
+      const allRoundSlots = Object.values(DRAFT_ORDER_2026).flat();
+      const otherSlot = allRoundSlots.find((s) => s.team === swappedTeam);
+      if (!otherSlot) return slot;
+      return {
+        ...slot,
+        team: otherSlot.team,
+        abbr: otherSlot.abbr,
+        color: otherSlot.color,
+      };
+    },
+    [tradeMap]
+  );
+
   const currentSlots = DRAFT_ORDER_2026[activeRound] || [];
   const allSlots = useMemo(() => {
     const slots = [];
@@ -51,13 +94,49 @@ export default function DraftPage() {
   const total = allSlots.length;
   const allTeams = getAllTeams();
 
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveSuccess(false);
+    // Simulate save delay (replace with real Firestore call when auth is wired)
+    await new Promise((r) => setTimeout(r, 400));
+    setSaving(false);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 2000);
+  };
+
+  const handleSubmit = async () => {
+    if (filled < total) return;
+    setSubmitting(true);
+    // Simulate submit delay (replace with real Firestore call when auth is wired)
+    await new Promise((r) => setTimeout(r, 600));
+    setSubmitting(false);
+    if (leagueId) {
+      router.push("/leagues");
+    }
+  };
+
   return (
     <div className="px-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h1 className="font-display text-xl font-bold tracking-wide">
-          MOCK DRAFT
-        </h1>
+      {leagueId && (
+        <button
+          onClick={() => router.push("/leagues")}
+          className="flex items-center gap-1.5 font-mono text-xs text-[var(--muted)] mb-2 hover:text-accent transition-colors"
+        >
+          <ArrowLeft size={14} /> Back to Leagues
+        </button>
+      )}
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <h1 className="font-display text-xl font-bold tracking-wide">
+            MOCK DRAFT
+          </h1>
+          {leagueName && (
+            <p className="font-mono text-[11px] text-accent mt-0.5">
+              {leagueName}
+            </p>
+          )}
+        </div>
         <div>
           <span className="font-mono text-sm text-accent">{filled}/{total}</span>
           <span className="font-mono text-sm text-[var(--muted)] ml-1">picks</span>
@@ -65,7 +144,7 @@ export default function DraftPage() {
       </div>
 
       {/* Progress */}
-      <div className="h-1 rounded-full bg-[var(--surface)] mb-4 overflow-hidden">
+      <div className="h-1 rounded-full bg-[var(--surface)] mb-4 overflow-hidden mt-3">
         <div
           className="h-full rounded-full transition-all duration-300"
           style={{
@@ -194,13 +273,25 @@ export default function DraftPage() {
             {/* Picker Header */}
             <div className="px-4 pt-4 pb-3 border-b border-[var(--border)]">
               <div className="flex justify-between items-center mb-3">
-                <div>
-                  <p className="font-mono text-[11px] text-accent tracking-[2px]">
-                    PICK #{activePick}
-                  </p>
-                  <p className="font-display text-base font-bold mt-1">
-                    {allSlots.find((s) => s.pick === activePick)?.team}
-                  </p>
+                <div className="flex items-center gap-2.5">
+                  {(() => {
+                    const rawSlot = allSlots.find((s) => s.pick === activePick);
+                    const slot = rawSlot ? getEffectiveSlot(rawSlot) : null;
+                    return slot ? (
+                      <TeamLogo abbr={slot.abbr} color={slot.color} size={38} />
+                    ) : null;
+                  })()}
+                  <div>
+                    <p className="font-mono text-[11px] text-accent tracking-[2px]">
+                      PICK #{activePick}
+                    </p>
+                    <p className="font-display text-base font-bold mt-1">
+                      {(() => {
+                        const rawSlot = allSlots.find((s) => s.pick === activePick);
+                        return rawSlot ? getEffectiveSlot(rawSlot).team : "";
+                      })()}
+                    </p>
+                  </div>
                 </div>
                 <button
                   onClick={() => {
@@ -273,20 +364,25 @@ export default function DraftPage() {
       )}
 
       {/* Pick List */}
-      {currentSlots.map((slot) => {
-        const player = picks[slot.pick];
+      {currentSlots.map((rawSlot) => {
+        const slot = getEffectiveSlot(rawSlot);
+        const player = picks[rawSlot.pick];
         return (
           <div
-            key={slot.pick}
-            onClick={() => setActivePick(slot.pick)}
+            key={rawSlot.pick}
+            onClick={() => setActivePick(rawSlot.pick)}
             className="flex items-center gap-2.5 px-3 py-2.5 mb-1.5 rounded-xl cursor-pointer transition-colors active:bg-[var(--surface)]"
             style={{
               background: player ? "var(--card)" : "var(--surface)",
               border: "1px solid var(--border)",
             }}
           >
-            <PickBadge pick={slot.pick} filled={!!player} />
-            {player && <PlayerAvatar name={player.name} pos={player.pos} size={34} />}
+            <PickBadge pick={rawSlot.pick} filled={!!player} />
+            {player ? (
+              <PlayerAvatar name={player.name} pos={player.pos} size={34} />
+            ) : (
+              <TeamLogo abbr={slot.abbr} color={slot.color} size={34} />
+            )}
             <div className="flex-1 min-w-0">
               {player ? (
                 <>
@@ -300,11 +396,11 @@ export default function DraftPage() {
               ) : (
                 <>
                   <div className="font-display font-medium text-sm text-[var(--muted)]">
-                    Select player...
+                    Select player&hellip;
                   </div>
                   <div className="font-mono text-[11px] text-[var(--muted)]">
                     {slot.team}
-                    {slot.note ? ` (${slot.note})` : ""}
+                    {rawSlot.note ? ` (${rawSlot.note})` : ""}
                   </div>
                 </>
               )}
@@ -313,23 +409,23 @@ export default function DraftPage() {
             {showConf && player && (
               <select
                 onClick={(e) => e.stopPropagation()}
-                value={confidence[slot.pick] || ""}
+                value={confidence[rawSlot.pick] || ""}
                 onChange={(e) =>
                   setConfidence((p) => ({
                     ...p,
-                    [slot.pick]: parseInt(e.target.value),
+                    [rawSlot.pick]: parseInt(e.target.value),
                   }))
                 }
                 className="bg-[var(--surface)] border border-[var(--border)] rounded-md px-1.5 py-1 font-mono text-xs font-bold w-[52px]"
                 style={{
-                  color: confidence[slot.pick]
+                  color: confidence[rawSlot.pick]
                     ? "var(--accent)"
                     : "var(--muted)",
                 }}
               >
                 <option value="">-</option>
                 {Array.from({ length: total }, (_, i) => i + 1)
-                  .filter((n) => !usedConf.has(n) || n === confidence[slot.pick])
+                  .filter((n) => !usedConf.has(n) || n === confidence[rawSlot.pick])
                   .map((n) => (
                     <option key={n} value={n}>
                       {n}pt
@@ -342,14 +438,41 @@ export default function DraftPage() {
         );
       })}
 
-      {/* Submit */}
-      {filled === total && (
-        <div className="sticky bottom-20 pt-3">
-          <button className="w-full bg-accent text-black font-display font-bold py-3.5 rounded-xl text-sm flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(0,232,123,0.2)]">
-            <Send size={16} /> SUBMIT MOCK DRAFT
+      {/* Save & Submit */}
+      <div className="sticky bottom-20 pt-3 space-y-2">
+        {/* Save button - always visible when there are picks */}
+        {filled > 0 && (
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] font-display font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors hover:border-accent/30"
+            style={{
+              opacity: saving ? 0.6 : 1,
+              background: saveSuccess ? "#00e87b22" : undefined,
+              borderColor: saveSuccess ? "#00e87b44" : undefined,
+            }}
+          >
+            <Save size={16} />
+            {saving ? "SAVING..." : saveSuccess ? "SAVED ✓" : "SAVE PROGRESS"}
           </button>
-        </div>
-      )}
+        )}
+        {/* Submit button - visible when all picks are filled */}
+        {filled === total && (
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="w-full bg-accent text-black font-display font-bold py-3.5 rounded-xl text-sm flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(0,232,123,0.2)]"
+            style={{ opacity: submitting ? 0.6 : 1 }}
+          >
+            <Send size={16} />
+            {submitting
+              ? "SUBMITTING..."
+              : leagueId
+                ? "SUBMIT TO LEAGUE"
+                : "SUBMIT MOCK DRAFT"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

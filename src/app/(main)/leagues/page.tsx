@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, X, FileText } from "lucide-react";
 
 interface LocalLeague {
   id: number;
@@ -14,6 +15,7 @@ interface LocalLeague {
 }
 
 export default function LeaguesPage() {
+  const router = useRouter();
   const [leagues, setLeagues] = useState<LocalLeague[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [leagueName, setLeagueName] = useState("");
@@ -139,6 +141,16 @@ export default function LeaguesPage() {
               {l.code}
             </span>
           </div>
+          <button
+            onClick={() =>
+              router.push(
+                `/draft?leagueId=${l.id}&leagueName=${encodeURIComponent(l.name)}&rounds=${l.rounds}`
+              )
+            }
+            className="w-full mt-3 bg-accent text-black font-display font-semibold py-2.5 rounded-lg text-sm flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,232,123,0.15)] hover:shadow-[0_0_30px_rgba(0,232,123,0.25)] transition-shadow"
+          >
+            <FileText size={16} /> Add Bracket
+          </button>
         </div>
       ))}
 
