@@ -24,7 +24,7 @@ export interface League {
 // ─── Prospect ────────────────────────────────────────────────────────────
 export type Position =
   | "QB" | "RB" | "WR" | "TE"
-  | "OT" | "OG" | "OL" | "C"
+  | "OT" | "OG" | "OC" | "OL" | "C"
   | "EDGE" | "DT" | "DL"
   | "LB" | "CB" | "S"
   | "K" | "P";
