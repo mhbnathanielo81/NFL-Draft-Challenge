@@ -24,7 +24,8 @@ export default function DraftPage() {
   const router = useRouter();
   const leagueId = searchParams.get("leagueId");
   const leagueName = searchParams.get("leagueName");
-  const leagueRounds = parseInt(searchParams.get("rounds") || "1", 10) as 1 | 2;
+  const parsedRounds = parseInt(searchParams.get("rounds") || "1", 10);
+  const leagueRounds = (parsedRounds === 2 ? 2 : 1) as 1 | 2;
 
   const [picks, setPicks] = useState<Record<number, Prospect>>({});
   const [confidence, setConfidence] = useState<Record<number, number>>({});
@@ -396,7 +397,7 @@ export default function DraftPage() {
               ) : (
                 <>
                   <div className="font-display font-medium text-sm text-[var(--muted)]">
-                    Select player&hellip;
+                    Select player...
                   </div>
                   <div className="font-mono text-[11px] text-[var(--muted)]">
                     {slot.team}

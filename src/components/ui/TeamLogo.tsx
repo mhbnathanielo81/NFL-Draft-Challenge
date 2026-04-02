@@ -1,5 +1,3 @@
-import type { DraftSlot } from "@/types";
-
 /**
  * Renders a styled team logo badge using the team abbreviation and color.
  * Displays the abbreviation in a circle with the team's brand color.
